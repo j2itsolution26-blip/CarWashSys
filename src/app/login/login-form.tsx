@@ -4,7 +4,6 @@ import { useActionState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { signInAction } from "@/server/actions/auth.actions";
 import { Button } from "@/components/ui/button";
-import { Card, CardBody } from "@/components/ui/card";
 import { TextField } from "@/components/ui/field";
 import { Alert } from "@/components/ui/feedback";
 
@@ -32,37 +31,35 @@ export function LoginForm({ returnTo }: { returnTo?: string | null }) {
     }
   }, [state, router, returnTo]);
 
+  // The card chrome lives on the page so it can sit over the backdrop scene;
+  // this component is just the form.
   return (
-    <Card>
-      <CardBody>
-        <form action={formAction} className="space-y-4">
-          {state && !state.ok ? <Alert tone="error">{state.message}</Alert> : null}
+    <form action={formAction} className="space-y-4">
+      {state && !state.ok ? <Alert tone="error">{state.message}</Alert> : null}
 
-          <TextField
-            label="Email"
-            name="email"
-            type="email"
-            autoComplete="username"
-            required
-            autoFocus
-            placeholder="you@cgcarwash.local"
-            inputSize="lg"
-          />
+      <TextField
+        label="Email"
+        name="email"
+        type="email"
+        autoComplete="username"
+        required
+        autoFocus
+        placeholder="you@cgcarwash.local"
+        inputSize="lg"
+      />
 
-          <TextField
-            label="Password"
-            name="password"
-            type="password"
-            autoComplete="current-password"
-            required
-            inputSize="lg"
-          />
+      <TextField
+        label="Password"
+        name="password"
+        type="password"
+        autoComplete="current-password"
+        required
+        inputSize="lg"
+      />
 
-          <Button type="submit" size="lg" fullWidth isLoading={isPending}>
-            {isPending ? "Signing in…" : "Sign in"}
-          </Button>
-        </form>
-      </CardBody>
-    </Card>
+      <Button type="submit" size="lg" fullWidth isLoading={isPending}>
+        {isPending ? "Signing in…" : "Sign in"}
+      </Button>
+    </form>
   );
 }

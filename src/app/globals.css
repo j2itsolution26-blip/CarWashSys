@@ -136,6 +136,65 @@
   .text-strong {
     color: var(--text-strong);
   }
+
+  /*
+   * Sign-in card.
+   *
+   * The backdrop behind it is always the dark cinematic scene, so this card is
+   * always light — in dark mode too. Rather than special-casing every control
+   * inside it, the LIGHT TOKEN VALUES ARE REDEFINED ON THE CARD ITSELF. The
+   * existing TextField, Button and Alert components read those same variables,
+   * so they render correctly here with no changes to the shared components and
+   * no duplicated styling.
+   */
+  .login-card {
+    color-scheme: light;
+
+    --surface-card: oklch(1 0 0);
+    --surface-muted: oklch(0.965 0.006 250);
+    --surface-inset: oklch(0.955 0.008 250);
+
+    --text-strong: oklch(0.21 0.02 260);
+    --text-body: oklch(0.36 0.017 260);
+    --text-muted: oklch(0.5 0.015 260);
+
+    --line: oklch(0.9 0.008 260);
+    --line-strong: oklch(0.82 0.012 260);
+
+    --brand: oklch(0.52 0.19 258);
+    --brand-strong: oklch(0.45 0.19 258);
+    --brand-soft: oklch(0.95 0.03 258);
+    --brand-contrast: oklch(0.99 0 0);
+
+    --danger: oklch(0.55 0.2 25);
+    --danger-soft: oklch(0.96 0.03 25);
+    --positive: oklch(0.55 0.15 155);
+    --positive-soft: oklch(0.95 0.04 155);
+
+    /* Frosted glass over the scene. */
+    background-color: color-mix(in oklab, var(--surface-card) 96%, transparent);
+    -webkit-backdrop-filter: blur(18px) saturate(120%);
+    backdrop-filter: blur(18px) saturate(120%);
+    border: 1px solid rgb(255 255 255 / 0.55);
+    border-radius: 1.15rem;
+    box-shadow:
+      0 24px 60px -18px rgb(2 8 22 / 0.65),
+      0 2px 8px -2px rgb(2 8 22 / 0.35);
+  }
+
+  /* Backdrop-filter is expensive on low-end tablets and unsupported on some
+     older Android WebViews; fall back to a solid card there. */
+  @supports not (backdrop-filter: blur(1px)) {
+    .login-card {
+      background-color: var(--surface-card);
+    }
+  }
+
+  /* A brand-blue ring on focus, per the redesign, without losing the global
+     keyboard-focus outline defined in the base layer. */
+  .login-card input:focus-visible {
+    outline-color: var(--brand);
+  }
 }
 
 /*

@@ -9,11 +9,19 @@ import { PrismaClient } from "@prisma/client";
  */
 const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };
 
+/**
+ * With PRISMA_QUERY_LOG=1 the client emits a `query` event per statement so
+ * `npm run perf` can count statements and attribute time per screen. Off by
+ * default — event logging on every request would itself cost measurable time.
+ */
+const queryLogging = process.env.PRISMA_QUERY_LOG === "1";
+
 export const prisma =
   globalForPrisma.prisma ??
   new PrismaClient({
-    log:
-      process.env.NODE_ENV === "development"
+    log: queryLogging
+      ? [{ emit: "event", level: "query" }, "warn", "error"]
+      : process.env.NODE_ENV === "development"
         ? ["warn", "error"]
         : ["error"],
   });

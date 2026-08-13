@@ -56,6 +56,16 @@ export interface CatalogCategoryOption {
  */
 export async function getPosCatalog(): Promise<CatalogCategoryOption[]> {
   const categories = await prisma.vehicleCategory.findMany({
+    /*
+     * One round trip instead of four. The default strategy fetches categories,
+     * then variants, then prices, then services — each waiting on the previous
+     * level's ids, which on a remote database costs four times the latency for
+     * the screen the cashier opens most.
+     *
+     * The result shape and every filter below are identical either way; only
+     * the number of statements changes.
+     */
+    relationLoadStrategy: "join",
     where: { isActive: true },
     orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
     select: {

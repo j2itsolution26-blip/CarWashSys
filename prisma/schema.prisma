@@ -27,6 +27,16 @@
 
 generator client {
   provider = "prisma-client-js"
+  /*
+   * `relationJoins` lets a query opt into resolving nested relations with a
+   * single SQL LATERAL JOIN instead of one round trip per nesting level.
+   *
+   * The POS catalog is four levels deep (category → variant → price → service).
+   * By default Prisma issues four SEQUENTIAL queries for it, so the page cost
+   * four full round trips to the database before rendering. Opt-in per query
+   * via `relationLoadStrategy: "join"`; every other query is unaffected.
+   */
+  previewFeatures = ["relationJoins"]
 }
 
 datasource db {
