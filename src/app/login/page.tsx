@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { Alert } from "@/components/ui/feedback";
@@ -53,17 +54,6 @@ export default async function LoginPage({
         guarantee survives future edits to the scene.
       */}
       <div className="pointer-events-auto relative z-10 w-full max-w-sm">
-        <div className="mb-6 text-center">
-          <p aria-hidden="true" className="text-4xl drop-shadow-[0_2px_10px_rgba(0,0,0,0.5)]">
-            🚿
-          </p>
-          {/* On the dark scene the heading is always light, independent of theme. */}
-          <h1 className="mt-2 text-3xl font-bold uppercase tracking-wide text-white drop-shadow-[0_2px_12px_rgba(0,0,0,0.6)]">
-            {businessName}
-          </h1>
-          <p className="mt-1 text-sm font-medium text-white/75">Point of Sale — staff sign in</p>
-        </div>
-
         {verified === "1" ? (
           <div className="login-card mb-4 p-4">
             <Alert tone="success" title="Owner account verified">
@@ -72,10 +62,48 @@ export default async function LoginPage({
           </div>
         ) : null}
 
-        {/* `.login-card` redefines the light tokens locally, so the fields and
-            button inside stay light even when the app is in dark mode. */}
-        <div className="login-card p-6">
+        {/* `.login-card` redefines the theme tokens locally as dark navy glass,
+            so the fields, button and alerts inside restyle themselves without
+            any change to the shared UI components. */}
+        <div className="login-card p-6 sm:p-7">
+          {/* Branding lives inside the card, as in the reference composition. */}
+          <div className="mb-6 text-center">
+            <div className="flex items-center justify-center gap-2.5">
+              {/* The existing app mark, reused rather than reinvented. */}
+              <Image
+                src="/icons/icon-192.png"
+                alt=""
+                aria-hidden="true"
+                width={44}
+                height={44}
+                priority
+                className="size-11 rounded-xl"
+              />
+              <span className="text-4xl font-extrabold tracking-tight text-white">
+                CG
+              </span>
+            </div>
+            <h1 className="mt-2 text-2xl font-extrabold uppercase tracking-[0.06em] text-white">
+              {businessName.replace(/^CG\s+/i, "")}
+            </h1>
+            <p className="mt-1.5 text-sm font-medium text-[var(--text-muted)]">
+              Point of Sale — staff sign in
+            </p>
+          </div>
+
           <LoginForm returnTo={returnTo} />
+
+          {/* Security note — small and secondary, per the brief. */}
+          <p className="mt-5 flex items-start justify-center gap-2 text-center text-xs text-[var(--text-muted)]">
+            <span aria-hidden="true" className="mt-px shrink-0 text-[var(--brand-strong)]">
+              <ShieldIcon />
+            </span>
+            <span>
+              Authorised staff only.
+              <br />
+              All activity is recorded.
+            </span>
+          </p>
         </div>
 
         {/*
@@ -118,10 +146,38 @@ export default async function LoginPage({
             lightened here rather than in the shared component. */}
         <InstallAppButton className="mt-6 [&>p]:text-white/60" />
 
-        <p className="mt-6 text-center text-xs text-white/55">
-          Authorised staff only. All activity is recorded.
-        </p>
+        {/* Brand tagline, sitting under the card as in the reference. */}
+        <div className="mt-6 flex items-center justify-center gap-2.5 text-center">
+          <span aria-hidden="true" className="text-[var(--brand-strong)] text-[#1683ff]">
+            <DropletIcon />
+          </span>
+          <span>
+            <span className="block text-sm font-bold uppercase tracking-[0.16em] text-white/90">
+              Clean. Shine. Protect.
+            </span>
+            <span className="block text-xs text-white/45">We take care of your ride.</span>
+          </span>
+        </div>
       </div>
     </main>
+  );
+}
+
+function ShieldIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <path
+        d="M12 2.5 4.5 5.8v6.1c0 4.6 3.2 8.4 7.5 9.6 4.3-1.2 7.5-5 7.5-9.6V5.8Z"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function DropletIcon() {
+  return (
+    <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
+      <path d="M12 3s6 6.6 6 10.6A6 6 0 0 1 6 13.6C6 9.6 12 3 12 3Z" strokeLinejoin="round" />
+    </svg>
   );
 }

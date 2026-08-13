@@ -148,52 +148,68 @@
    * no duplicated styling.
    */
   .login-card {
-    color-scheme: light;
+    /*
+     * Always dark navy glass, in both app themes — it sits on the same dark
+     * wash-bay scene either way. Rather than special-casing every control, the
+     * TOKENS ARE REDEFINED ON THE CARD; TextField, Button and Alert read these
+     * same variables, so they restyle themselves with no change to the shared
+     * components and nothing else in the app affected.
+     */
+    color-scheme: dark;
 
-    --surface-card: oklch(1 0 0);
-    --surface-muted: oklch(0.965 0.006 250);
-    --surface-inset: oklch(0.955 0.008 250);
+    --surface-card: #0b1b38;
+    --surface-muted: #10254a;
+    --surface-inset: #0d2044;
 
-    --text-strong: oklch(0.21 0.02 260);
-    --text-body: oklch(0.36 0.017 260);
-    --text-muted: oklch(0.5 0.015 260);
+    --text-strong: #ffffff;
+    --text-body: #cbd8ec;
+    --text-muted: #94a3b8;
 
-    --line: oklch(0.9 0.008 260);
-    --line-strong: oklch(0.82 0.012 260);
+    --line: rgb(120 170 255 / 0.16);
+    --line-strong: rgb(120 170 255 / 0.3);
 
-    --brand: oklch(0.52 0.19 258);
-    --brand-strong: oklch(0.45 0.19 258);
-    --brand-soft: oklch(0.95 0.03 258);
-    --brand-contrast: oklch(0.99 0 0);
+    --brand: #0066ff;
+    --brand-strong: #1683ff;
+    --brand-soft: rgb(22 131 255 / 0.16);
+    --brand-contrast: #ffffff;
 
-    --danger: oklch(0.55 0.2 25);
-    --danger-soft: oklch(0.96 0.03 25);
-    --positive: oklch(0.55 0.15 155);
-    --positive-soft: oklch(0.95 0.04 155);
+    --danger: #ff6b6b;
+    --danger-soft: rgb(255 107 107 / 0.14);
+    --positive: #34d399;
+    --positive-soft: rgb(52 211 153 / 0.14);
 
-    /* Frosted glass over the scene. */
-    background-color: color-mix(in oklab, var(--surface-card) 96%, transparent);
-    -webkit-backdrop-filter: blur(18px) saturate(120%);
-    backdrop-filter: blur(18px) saturate(120%);
-    border: 1px solid rgb(255 255 255 / 0.55);
-    border-radius: 1.15rem;
+    background: linear-gradient(
+      160deg,
+      rgb(12 30 62 / 0.9) 0%,
+      rgb(6 18 40 / 0.93) 55%,
+      rgb(4 12 30 / 0.95) 100%
+    );
+    -webkit-backdrop-filter: blur(22px) saturate(130%);
+    backdrop-filter: blur(22px) saturate(130%);
+    border: 1px solid rgb(120 170 255 / 0.22);
+    border-radius: 1.25rem;
     box-shadow:
-      0 24px 60px -18px rgb(2 8 22 / 0.65),
-      0 2px 8px -2px rgb(2 8 22 / 0.35);
+      0 30px 80px -24px rgb(0 0 0 / 0.8),
+      inset 0 1px 0 0 rgb(255 255 255 / 0.06);
   }
 
   /* Backdrop-filter is expensive on low-end tablets and unsupported on some
-     older Android WebViews; fall back to a solid card there. */
+     older Android WebViews; an opaque navy is the fallback there. */
   @supports not (backdrop-filter: blur(1px)) {
     .login-card {
-      background-color: var(--surface-card);
+      background: #071a3d;
     }
   }
 
-  /* A brand-blue ring on focus, per the redesign, without losing the global
-     keyboard-focus outline defined in the base layer. */
+  /* Inputs read as inset wells on the glass rather than white boxes. */
+  .login-card input[type="email"],
+  .login-card input[type="password"],
+  .login-card input[type="text"] {
+    background-color: rgb(3 10 26 / 0.55);
+  }
+
   .login-card input:focus-visible {
-    outline-color: var(--brand);
+    outline-color: var(--brand-strong);
   }
 }
 
