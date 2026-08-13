@@ -1,0 +1,185 @@
+@import "tailwindcss";
+
+/*
+ * CG Car Wash POS — design tokens.
+ *
+ * Priorities, in order: legibility at arm's length on a counter screen, large
+ * touch targets, and unambiguous status. Decoration is deliberately minimal —
+ * no gradients on interactive surfaces, no animation longer than 150ms.
+ */
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: ui-monospace, "Cascadia Mono", "Segoe UI Mono", Menlo, monospace;
+
+  /* Minimum comfortable touch target on a tablet POS. */
+  --spacing-touch: 3rem;
+
+  --radius-card: 0.875rem;
+}
+
+:root {
+  color-scheme: light;
+
+  --surface-page: oklch(0.98 0.005 250);
+  --surface-card: oklch(1 0 0);
+  --surface-muted: oklch(0.965 0.006 250);
+  --surface-inset: oklch(0.955 0.008 250);
+
+  --text-strong: oklch(0.21 0.02 260);
+  --text-body: oklch(0.36 0.017 260);
+  --text-muted: oklch(0.53 0.015 260);
+
+  --line: oklch(0.9 0.008 260);
+  --line-strong: oklch(0.84 0.01 260);
+
+  --brand: oklch(0.52 0.19 258);
+  --brand-strong: oklch(0.45 0.19 258);
+  --brand-soft: oklch(0.95 0.03 258);
+  --brand-contrast: oklch(0.99 0 0);
+
+  --positive: oklch(0.55 0.15 155);
+  --positive-soft: oklch(0.95 0.04 155);
+  --danger: oklch(0.55 0.2 25);
+  --danger-soft: oklch(0.96 0.03 25);
+  --warning: oklch(0.7 0.15 75);
+}
+
+.dark {
+  color-scheme: dark;
+
+  --surface-page: oklch(0.19 0.012 260);
+  --surface-card: oklch(0.24 0.014 260);
+  --surface-muted: oklch(0.27 0.014 260);
+  --surface-inset: oklch(0.22 0.013 260);
+
+  --text-strong: oklch(0.97 0.005 260);
+  --text-body: oklch(0.87 0.01 260);
+  --text-muted: oklch(0.68 0.015 260);
+
+  --line: oklch(0.33 0.014 260);
+  --line-strong: oklch(0.42 0.016 260);
+
+  --brand: oklch(0.65 0.17 258);
+  --brand-strong: oklch(0.72 0.16 258);
+  --brand-soft: oklch(0.3 0.06 258);
+  --brand-contrast: oklch(0.16 0.02 260);
+
+  --positive: oklch(0.72 0.16 155);
+  --positive-soft: oklch(0.28 0.05 155);
+  --danger: oklch(0.68 0.18 25);
+  --danger-soft: oklch(0.3 0.07 25);
+  --warning: oklch(0.78 0.14 75);
+}
+
+@layer base {
+  * {
+    border-color: var(--line);
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    background-color: var(--surface-page);
+    color: var(--text-body);
+    font-family: var(--font-sans);
+    /* A POS should never scroll sideways on any device. */
+    overflow-x: hidden;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    color: var(--text-strong);
+    font-weight: 600;
+    text-wrap: balance;
+  }
+
+  /* Visible focus everywhere — the POS is fully keyboard operable. */
+  :focus-visible {
+    outline: 2px solid var(--brand);
+    outline-offset: 2px;
+    border-radius: 0.375rem;
+  }
+
+  /* Numbers in tables and totals stay column-aligned. */
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
+
+@layer components {
+  .surface-card {
+    background-color: var(--surface-card);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-card);
+  }
+
+  .text-muted {
+    color: var(--text-muted);
+  }
+
+  .text-strong {
+    color: var(--text-strong);
+  }
+}
+
+/*
+ * Receipt printing.
+ *
+ * Targets both a normal A4/Letter printer and an 80mm thermal roll. Everything
+ * chrome-like is removed so the paper contains only the receipt.
+ */
+@media print {
+  @page {
+    margin: 8mm;
+  }
+
+  html,
+  body {
+    background: #fff !important;
+    color: #000 !important;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+
+  .print-only {
+    display: block !important;
+  }
+
+  .receipt-sheet {
+    box-shadow: none !important;
+    border: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 100% !important;
+    max-width: 80mm;
+    font-family: var(--font-mono);
+    color: #000 !important;
+  }
+
+  .receipt-sheet * {
+    color: #000 !important;
+    background: transparent !important;
+  }
+}
+
+.print-only {
+  display: none;
+}

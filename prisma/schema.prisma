@@ -1,0 +1,644 @@
+// ---------------------------------------------------------------------------
+// CG Car Wash — POS & Transaction Management data model (PostgreSQL)
+//
+// Design rules enforced by this schema:
+//
+//  * MONEY IS ALWAYS Decimal(12,2). Never Float, never Int-centavos. Peso
+//    amounts are read back as Prisma.Decimal and computed with decimal.js so
+//    ₱135 + ₱135 + ₱160 can never drift.
+//
+//  * PRICES ARE EFFECTIVE-DATED AND APPEND-ONLY. `ServicePrice` rows are never
+//    updated in place. Changing Sedan Body Wash ₱135 -> ₱150 closes the old row
+//    (`effectiveTo` set, `currentKey` nulled) and inserts a new one. Exactly one
+//    row per (variant, service) may be current at a time, guaranteed by the
+//    unique index on `currentKey` (Postgres treats NULLs as distinct, so any
+//    number of superseded rows may coexist).
+//
+//  * TRANSACTIONS SNAPSHOT EVERYTHING THEY DISPLAY. `TransactionItem` stores the
+//    unit price, the service name, and a FK to the exact `ServicePrice` row that
+//    produced it. A receipt printed today and reprinted next year is identical,
+//    regardless of later price edits.
+//
+//  * NO UNUSED TABLES. Every model below is read or written by application code.
+//    A `Branch` table was deliberately NOT created for hypothetical multi-branch
+//    support — it would be dead weight today and is a purely additive migration
+//    when a second location actually opens.
+// ---------------------------------------------------------------------------
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+/// Lifecycle of a job on the wash floor. Transitions are validated by the
+/// state machine in `src/lib/transactions/status-machine.ts` — the database
+/// stores the state, the domain layer owns which moves are legal.
+enum TransactionStatus {
+  PENDING
+  QUEUED
+  WASHING
+  QUALITY_CHECK
+  COMPLETED
+  PAID
+  CANCELLED
+}
+
+enum PaymentMethod {
+  CASH
+  GCASH
+  MAYA
+  BANK_TRANSFER
+  OTHER
+}
+
+enum PaymentStatus {
+  CAPTURED
+  VOIDED
+  REFUNDED
+}
+
+enum DiscountType {
+  PERCENTAGE
+  FIXED_AMOUNT
+}
+
+/// Fixed vocabulary for the audit trail. An enum rather than a free string so a
+/// typo can never silently create an unqueryable category of audit record.
+enum AuditAction {
+  USER_LOGIN
+  USER_LOGOUT
+  USER_LOGIN_FAILED
+  OWNER_REGISTRATION_STARTED
+  OWNER_REGISTRATION_VERIFIED
+  OWNER_REGISTRATION_REJECTED
+  OWNER_CODE_RESENT
+  USER_CREATED
+  USER_UPDATED
+  USER_DEACTIVATED
+  USER_PASSWORD_CHANGED
+  ROLE_ASSIGNED
+  ROLE_REVOKED
+  TRANSACTION_CREATED
+  TRANSACTION_UPDATED
+  TRANSACTION_STATUS_CHANGED
+  TRANSACTION_CANCELLED
+  TRANSACTION_VOIDED
+  PAYMENT_CAPTURED
+  PAYMENT_VOIDED
+  PAYMENT_REFUNDED
+  DISCOUNT_APPLIED
+  DISCOUNT_CREATED
+  DISCOUNT_UPDATED
+  PRICE_CREATED
+  PRICE_CHANGED
+  PRICE_DEACTIVATED
+  SERVICE_CREATED
+  SERVICE_UPDATED
+  SERVICE_DEACTIVATED
+  CATEGORY_CREATED
+  CATEGORY_UPDATED
+  CATEGORY_DEACTIVATED
+  VARIANT_CREATED
+  VARIANT_UPDATED
+  VARIANT_DEACTIVATED
+}
+
+// ---------------------------------------------------------------------------
+// Identity, roles & permissions
+// ---------------------------------------------------------------------------
+
+model User {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  name         String
+  passwordHash String
+  isActive     Boolean   @default(true)
+  lastLoginAt  DateTime?
+
+  /// Account status is expressed with the two columns below rather than a third
+  /// `accountStatus` enum, which would duplicate `isActive`:
+  ///
+  ///   pending  = emailVerified false   (registered, code not yet confirmed)
+  ///   active   = emailVerified true  AND isActive true
+  ///   disabled = isActive false
+  ///
+  /// Staff created by an administrator are verified on creation — an admin
+  /// vouching for the account IS the verification. Only self-registration
+  /// (the owner) has to prove control of the mailbox.
+  emailVerified   Boolean   @default(false)
+  emailVerifiedAt DateTime?
+
+  /// THE SINGLE-OWNER GUARANTEE.
+  ///
+  /// `true` on the one owner account, NULL on everybody else. Postgres treats
+  /// NULLs as distinct in a unique index, so any number of non-owners coexist
+  /// while a second `true` is rejected by the database itself. Two simultaneous
+  /// registrations cannot both win: one commits, the other gets a unique
+  /// violation and is refused. This is the constraint the application logic
+  /// cannot talk its way around.
+  ownerSingleton Boolean? @unique
+
+  /// Throttling state for credential stuffing protection. Checked and mutated
+  /// by the auth layer only.
+  failedLoginAttempts Int       @default(0)
+  lockedUntil         DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  roles UserRole[]
+
+  createdTransactions  Transaction[]              @relation("TransactionCreatedBy")
+  assignedTransactions Transaction[]              @relation("TransactionAssignedStaff")
+  statusChanges        TransactionStatusHistory[] @relation("StatusChangedBy")
+  processedPayments    TransactionPayment[]       @relation("PaymentProcessedBy")
+  createdPrices        ServicePrice[]             @relation("PriceCreatedBy")
+  createdDiscounts     Discount[]                 @relation("DiscountCreatedBy")
+  auditLogs            AuditLog[]                 @relation("AuditActor")
+
+  @@index([isActive])
+  @@map("users")
+}
+
+model Role {
+  id          String  @id @default(cuid())
+  key         String  @unique
+  name        String
+  description String?
+  /// System roles (OWNER/ADMIN/CASHIER/WASHER) cannot be deleted through the UI.
+  isSystem    Boolean @default(false)
+  sortOrder   Int     @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users       UserRole[]
+  permissions RolePermission[]
+
+  @@map("roles")
+}
+
+model Permission {
+  id          String  @id @default(cuid())
+  key         String  @unique
+  description String
+  category    String
+
+  roles RolePermission[]
+
+  @@index([category])
+  @@map("permissions")
+}
+
+model UserRole {
+  userId     String
+  roleId     String
+  assignedAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([userId, roleId])
+  @@index([roleId])
+  @@map("user_roles")
+}
+
+model RolePermission {
+  roleId       String
+  permissionId String
+
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+  @@index([permissionId])
+  @@map("role_permissions")
+}
+
+// ---------------------------------------------------------------------------
+// Vehicle catalog
+// ---------------------------------------------------------------------------
+
+model VehicleCategory {
+  id          String  @id @default(cuid())
+  name        String
+  slug        String  @unique
+  /// Emoji shown on the POS tile. Presentation data, but it belongs to the
+  /// record so the owner can add a category without a code deploy.
+  icon        String  @default("🚗")
+  description String?
+  sortOrder   Int     @default(0)
+  isActive    Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  variants     VehicleVariant[]
+  transactions Transaction[]
+
+  @@index([isActive, sortOrder])
+  @@map("vehicle_categories")
+}
+
+/// Every category has at least one variant — categories with a single price
+/// tier get one named "Standard". This is deliberate: it means pricing is
+/// ALWAYS `variant x service` with no nullable branch, so the motorcycle
+/// displacement tiers need no special case anywhere in the pricing engine.
+model VehicleVariant {
+  id         String @id @default(cuid())
+  categoryId String
+  name       String
+  slug       String
+
+  /// Engine displacement bounds. Populated for motorcycles only; used to render
+  /// "100–125cc" on the tile and to keep tiers ordered correctly.
+  minDisplacementCc Int?
+  maxDisplacementCc Int?
+
+  sortOrder Int     @default(0)
+  isActive  Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  category     VehicleCategory @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  prices       ServicePrice[]
+  transactions Transaction[]
+
+  @@unique([categoryId, slug])
+  @@index([categoryId, isActive, sortOrder])
+  @@map("vehicle_variants")
+}
+
+// ---------------------------------------------------------------------------
+// Service catalog & effective-dated pricing
+// ---------------------------------------------------------------------------
+
+model Service {
+  id          String  @id @default(cuid())
+  name        String
+  slug        String  @unique
+  description String?
+  /// Whether the cashier may set a quantity > 1 for this line.
+  allowsQuantity Boolean @default(false)
+  sortOrder   Int     @default(0)
+  isActive    Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  prices ServicePrice[]
+  items  TransactionItem[]
+
+  @@index([isActive, sortOrder])
+  @@map("services")
+}
+
+/// Append-only price ledger. One row = "this variant + this service cost this
+/// much, from this moment until that moment". Never UPDATE the amount of an
+/// existing row: supersede it. `PriceService.changePrice()` is the only writer.
+model ServicePrice {
+  id        String  @id @default(cuid())
+  variantId String
+  serviceId String
+
+  amount Decimal @db.Decimal(12, 2)
+
+  effectiveFrom DateTime  @default(now())
+  effectiveTo   DateTime?
+
+  /// Literally `"<variantId>:<serviceId>"` while this row is the live price, and
+  /// NULL once superseded. The unique index is what makes "exactly one current
+  /// price per variant+service" a database guarantee rather than a convention.
+  currentKey String? @unique
+
+  /// Lets an owner take a service off the menu for one vehicle type without
+  /// destroying the price history that old receipts depend on.
+  isActive Boolean @default(true)
+
+  note        String?
+  createdById String?
+
+  createdAt DateTime @default(now())
+
+  variant   VehicleVariant    @relation(fields: [variantId], references: [id], onDelete: Restrict)
+  service   Service           @relation(fields: [serviceId], references: [id], onDelete: Restrict)
+  createdBy User?             @relation("PriceCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  items     TransactionItem[]
+
+  @@index([variantId, serviceId, effectiveFrom])
+  @@index([serviceId])
+  @@map("service_prices")
+}
+
+// ---------------------------------------------------------------------------
+// Transactions
+// ---------------------------------------------------------------------------
+
+model Transaction {
+  id                String @id @default(cuid())
+  /// Human-facing, gapless, zero-padded: "TXN-000001". Allocated from the
+  /// `Counter` table inside the same DB transaction that inserts this row, so
+  /// two terminals clicking "New Transaction" simultaneously cannot collide.
+  transactionNumber String @unique
+
+  /// Anonymous walk-in identity. NO customer name, phone, or email is ever
+  /// collected (product requirement). Resets to 1 each business day.
+  customerNumber Int
+  customerLabel  String
+  businessDate   DateTime @db.Date
+
+  /// Nullable ONLY while the transaction is a freshly-numbered PENDING draft.
+  /// The workflow allocates "Customer 1 / TXN-000001" the moment the cashier
+  /// presses New Transaction — before a vehicle has been picked — so the number
+  /// can be called out immediately. Payment is impossible until these are set.
+  categoryId String?
+  variantId  String?
+
+  /// Snapshotted labels so a renamed or deactivated category never rewrites an
+  /// old receipt.
+  vehicleCategoryName String?
+  vehicleVariantName  String?
+
+  status TransactionStatus @default(PENDING)
+
+  subtotal          Decimal @default(0) @db.Decimal(12, 2)
+  discountAmount    Decimal @default(0) @db.Decimal(12, 2)
+  additionalCharges Decimal @default(0) @db.Decimal(12, 2)
+  total             Decimal @default(0) @db.Decimal(12, 2)
+
+  discountId    String?
+  discountCode  String?
+  discountLabel String?
+
+  notes String?
+
+  /// Client-generated key for the whole checkout. A retried or double-clicked
+  /// submit reuses it and the server returns the original transaction instead
+  /// of creating a second one.
+  idempotencyKey String? @unique
+
+  createdById     String
+  assignedStaffId String?
+
+  paidAt         DateTime?
+  queuedAt       DateTime?
+  startedAt      DateTime?
+  qualityCheckAt DateTime?
+  completedAt    DateTime?
+  cancelledAt    DateTime?
+  cancelReason   String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  category      VehicleCategory?           @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  variant       VehicleVariant?            @relation(fields: [variantId], references: [id], onDelete: Restrict)
+  createdBy     User                       @relation("TransactionCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  assignedStaff User?                      @relation("TransactionAssignedStaff", fields: [assignedStaffId], references: [id], onDelete: SetNull)
+  discount      Discount?                  @relation(fields: [discountId], references: [id], onDelete: SetNull)
+  items         TransactionItem[]
+  payments      TransactionPayment[]
+  statusHistory TransactionStatusHistory[]
+
+  @@unique([businessDate, customerNumber])
+  @@index([status, createdAt])
+  @@index([businessDate])
+  @@index([createdAt])
+  @@index([createdById])
+  @@map("transactions")
+}
+
+model TransactionItem {
+  id            String @id @default(cuid())
+  transactionId String
+  serviceId     String
+
+  /// Provenance: which exact price row was charged. Nullable only because a
+  /// price row may never be hard-deleted, but the FK is SetNull-safe.
+  servicePriceId String?
+
+  /// Snapshots. These, not the joins, are what the receipt renders.
+  serviceName String
+  unitPrice   Decimal @db.Decimal(12, 2)
+  quantity    Int     @default(1)
+  lineTotal   Decimal @db.Decimal(12, 2)
+
+  createdAt DateTime @default(now())
+
+  transaction  Transaction   @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  service      Service       @relation(fields: [serviceId], references: [id], onDelete: Restrict)
+  servicePrice ServicePrice? @relation(fields: [servicePriceId], references: [id], onDelete: SetNull)
+
+  /// A service can appear at most once per transaction; repeats use `quantity`.
+  @@unique([transactionId, serviceId])
+  @@index([serviceId])
+  @@map("transaction_items")
+}
+
+model TransactionPayment {
+  id            String        @id @default(cuid())
+  transactionId String
+  method        PaymentMethod
+  status        PaymentStatus @default(CAPTURED)
+
+  amountDue      Decimal  @db.Decimal(12, 2)
+  amountTendered Decimal  @db.Decimal(12, 2)
+  changeGiven    Decimal  @default(0) @db.Decimal(12, 2)
+  /// GCash/Maya/bank reference number. Never a card number — none is collected.
+  referenceNumber String?
+
+  /// Unique per payment attempt: the database, not the UI, is what makes a
+  /// double-submitted payment impossible.
+  idempotencyKey String? @unique
+
+  processedById String
+  voidedAt      DateTime?
+  voidReason    String?
+
+  createdAt DateTime @default(now())
+
+  transaction Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  processedBy User        @relation("PaymentProcessedBy", fields: [processedById], references: [id], onDelete: Restrict)
+
+  @@index([transactionId])
+  @@index([createdAt])
+  @@map("transaction_payments")
+}
+
+model TransactionStatusHistory {
+  id            String             @id @default(cuid())
+  transactionId String
+  fromStatus    TransactionStatus?
+  toStatus      TransactionStatus
+  note          String?
+  changedById   String?
+
+  createdAt DateTime @default(now())
+
+  transaction Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  changedBy   User?       @relation("StatusChangedBy", fields: [changedById], references: [id], onDelete: SetNull)
+
+  @@index([transactionId, createdAt])
+  @@map("transaction_status_history")
+}
+
+// ---------------------------------------------------------------------------
+// Discounts
+// ---------------------------------------------------------------------------
+
+model Discount {
+  id    String @id @default(cuid())
+  code  String @unique
+  name  String
+  type  DiscountType
+  /// Percent (0–100) when type = PERCENTAGE, peso amount when FIXED_AMOUNT.
+  value Decimal @db.Decimal(12, 2)
+
+  /// Caps a percentage discount in absolute pesos. NULL = uncapped.
+  maxAmount   Decimal? @db.Decimal(12, 2)
+  minSubtotal Decimal? @db.Decimal(12, 2)
+
+  /// When true, a cashier cannot apply this alone — it needs the discount:approve
+  /// permission (owner/admin).
+  requiresApproval Boolean @default(true)
+
+  isActive   Boolean   @default(true)
+  validFrom  DateTime?
+  validUntil DateTime?
+
+  createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  createdBy    User?         @relation("DiscountCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  transactions Transaction[]
+
+  @@index([isActive])
+  @@map("discounts")
+}
+
+// ---------------------------------------------------------------------------
+// Audit trail
+// ---------------------------------------------------------------------------
+
+/// Append-only. `AuditService` exposes no update or delete method at all, so
+/// there is no application code path that can rewrite history — the safest way
+/// to keep an audit log honest is for the capability not to exist.
+model AuditLog {
+  id       String      @id @default(cuid())
+  action   AuditAction
+  /// e.g. "Transaction", "ServicePrice", "User".
+  entityType String
+  entityId   String?
+
+  /// Actor identity is duplicated as text so the log stays readable even if the
+  /// user record is later deactivated or renamed.
+  actorId    String?
+  actorName  String?
+  actorEmail String?
+
+  /// One-line human summary, e.g. "Sedan Car / Body Wash ₱135.00 → ₱150.00".
+  summary String
+
+  before Json?
+  after  Json?
+
+  ipAddress String?
+  userAgent String?
+
+  createdAt DateTime @default(now())
+
+  actor User? @relation("AuditActor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([entityType, entityId])
+  @@index([action, createdAt])
+  @@index([createdAt])
+  @@index([actorId])
+  @@map("audit_logs")
+}
+
+// ---------------------------------------------------------------------------
+// Owner self-registration
+// ---------------------------------------------------------------------------
+
+/// A one-time, email-verified registration for the single owner account.
+///
+/// WHY THE PENDING STATE LIVES HERE AND NOT IN `users`: no User row is written
+/// until the emailed code is confirmed. That makes two requirements automatic
+/// rather than carefully-handled — a failed send can never leave a half-created
+/// owner behind, and an unverified owner cannot log in because there is nothing
+/// to log in to.
+model OwnerRegistration {
+  id    String @id @default(cuid())
+  name  String
+  email String
+
+  /// Bcrypt hash of the chosen password, carried until activation. The plaintext
+  /// password never exists outside the request that created it.
+  passwordHash String
+
+  /// Bcrypt hash of the 6-digit code. The code itself is never stored, never
+  /// logged, and never placed in a URL — it exists only in the email.
+  codeHash      String
+  codeExpiresAt DateTime
+
+  /// Wrong-code counter. At the limit the row locks for a cool-off period.
+  attempts    Int       @default(0)
+  lockedUntil DateTime?
+
+  resendCount Int      @default(0)
+  lastSentAt  DateTime @default(now())
+
+  /// Set once the code is accepted. A consumed registration can never be
+  /// replayed, which is what makes the code single-use.
+  consumedAt DateTime?
+
+  /// Literally "owner" while this registration is live, NULL once it is consumed
+  /// or superseded. The unique index means only ONE registration can be in
+  /// flight at a time — a double-clicked submit or two simultaneous strangers
+  /// cannot create two pending owners.
+  activeKey String? @unique
+
+  ipAddress String?
+  userAgent String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([email])
+  @@map("owner_registrations")
+}
+
+// ---------------------------------------------------------------------------
+// Sequence counters
+// ---------------------------------------------------------------------------
+
+/// Atomic allocator for human-facing numbers.
+///
+/// Why not a Postgres SEQUENCE: sequences are non-transactional and leave gaps
+/// on rollback. A receipt book with missing numbers is an accounting problem, so
+/// numbers are allocated by an `UPDATE ... RETURNING` on a locked row inside the
+/// same transaction that writes the record — roll back the transaction and the
+/// number is returned to the pool.
+///
+/// scope = "transaction" (key "global") or "customer" (key = business date).
+model Counter {
+  scope String
+  key   String
+  value Int    @default(0)
+
+  updatedAt DateTime @updatedAt
+
+  @@id([scope, key])
+  @@map("counters")
+}

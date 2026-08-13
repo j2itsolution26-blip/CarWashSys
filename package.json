@@ -1,0 +1,60 @@
+{
+  "name": "cg-carwash-pos",
+  "version": "1.0.0",
+  "private": true,
+  "description": "CG Car Wash — Point of Sale & Transaction Management System",
+  "scripts": {
+    "dev": "next dev -p 3002",
+    "build": "prisma generate && next build",
+    "start": "next start",
+    "lint": "eslint src",
+    "typecheck": "tsc --noEmit",
+    "verify": "npm run typecheck && npm run lint && npm run test:run",
+    "test": "vitest",
+    "test:run": "vitest run",
+    "postinstall": "prisma generate",
+    "db:push": "prisma db push",
+    "db:migrate": "prisma migrate dev",
+    "db:deploy": "prisma migrate deploy",
+    "db:studio": "prisma studio",
+    "db:seed": "tsx prisma/seed.ts",
+    "verify:workflow": "cross-env NODE_OPTIONS=--conditions=react-server tsx scripts/verify-workflow.ts",
+    "db:status": "cross-env NODE_OPTIONS=--conditions=react-server tsx scripts/db-status.ts",
+    "mail:check": "cross-env NODE_OPTIONS=--conditions=react-server tsx --env-file=.env scripts/mail-check.ts",
+    "db:reset": "prisma migrate reset"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.14.0",
+    "bcryptjs": "^3.0.2",
+    "clsx": "^2.1.1",
+    "decimal.js": "^10.5.0",
+    "lucide-react": "^0.541.0",
+    "next": "^15.5.0",
+    "next-auth": "^5.0.0-beta.29",
+    "nodemailer": "^8.0.11",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
+    "server-only": "^0.0.1",
+    "tailwind-merge": "^3.3.1",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@eslint/eslintrc": "^3.3.1",
+    "@tailwindcss/postcss": "^4.1.12",
+    "@types/node": "^22.15.0",
+    "@types/nodemailer": "^8.0.1",
+    "@types/react": "^19.1.10",
+    "@types/react-dom": "^19.1.7",
+    "cross-env": "^10.1.0",
+    "eslint": "^9.33.0",
+    "eslint-config-next": "^15.5.0",
+    "prisma": "^6.14.0",
+    "tailwindcss": "^4.1.12",
+    "tsx": "^4.20.4",
+    "typescript": "^5.9.2",
+    "vitest": "^3.2.4"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}
