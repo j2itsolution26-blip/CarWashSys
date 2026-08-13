@@ -1,8 +1,10 @@
 import Link from "next/link";
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { Alert } from "@/components/ui/feedback";
+import { InstallAppButton } from "@/components/pwa/install-app-button";
 import { getSessionUser } from "@/lib/auth/guards";
-import { landingPathFor } from "@/lib/navigation";
+import { landingPathFor, safeCallbackPath } from "@/lib/navigation";
 import { getOwnerStatus } from "@/server/services/owner-registration.service";
 import { LoginForm } from "./login-form";
 
@@ -19,14 +21,19 @@ export const dynamic = "force-dynamic";
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ verified?: string }>;
+  searchParams: Promise<{ verified?: string; callbackUrl?: string }>;
 }) {
+  const { verified, callbackUrl } = await searchParams;
+  // Where the user was heading before middleware intercepted them. The Host
+  // header identifies this deployment, so a callback pointing anywhere else is
+  // discarded rather than followed.
+  const returnTo = safeCallbackPath(callbackUrl, (await headers()).get("host"));
+
   const user = await getSessionUser();
   if (user) {
-    redirect(landingPathFor(user.permissions));
+    redirect(returnTo ?? landingPathFor(user.permissions));
   }
 
-  const { verified } = await searchParams;
   const ownerStatus = await getOwnerStatus();
   const businessName = process.env.NEXT_PUBLIC_BUSINESS_NAME ?? "CG CAR WASH";
 
@@ -49,7 +56,7 @@ export default async function LoginPage({
           </div>
         ) : null}
 
-        <LoginForm />
+        <LoginForm returnTo={returnTo} />
 
         {/*
           Shown only while no owner account exists. This is a convenience, not a
@@ -79,6 +86,13 @@ export default async function LoginPage({
             </Link>
           </p>
         ) : null}
+
+        {/*
+          Offered before sign-in as well as inside the app: this is the screen a
+          staff member reaches by typing the URL, and the whole point is that
+          they should only ever have to do that once.
+        */}
+        <InstallAppButton className="mt-6" />
 
         <p className="mt-6 text-center text-xs text-muted">
           Authorised staff only. All activity is recorded.

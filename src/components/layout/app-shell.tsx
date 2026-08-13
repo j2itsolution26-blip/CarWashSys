@@ -6,6 +6,8 @@ import { useEffect, useState, type ReactNode } from "react";
 import { signOutAction } from "@/server/actions/auth.actions";
 import { initialsOf, cn } from "@/lib/utils";
 import type { NavItem } from "@/lib/navigation";
+import { ConnectionStatus } from "@/components/pwa/connection-status";
+import { InstallAppButton } from "@/components/pwa/install-app-button";
 import { ThemeToggle } from "./theme-toggle";
 
 /**
@@ -116,6 +118,10 @@ export function AppShell({
         </nav>
 
         <div className="shrink-0 border-t border-[var(--line)] p-3">
+          {/* Renders nothing once the app is installed, or where install is
+              unavailable — so it never becomes permanent clutter. */}
+          <InstallAppButton className="mb-3" />
+
           <div className="flex items-center gap-3 rounded-lg px-2 py-2">
             <span
               aria-hidden="true"
@@ -162,6 +168,10 @@ export function AppShell({
 
           <ThemeToggle />
         </header>
+
+        {/* Sits directly under the header so a dropped connection is visible on
+            every screen, including mid-transaction. */}
+        <ConnectionStatus />
 
         <main
           id="main-content"

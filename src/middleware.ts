@@ -21,7 +21,14 @@ export const config = {
      * Everything except Next.js internals and static assets. Auth API routes are
      * allowed through by the `authorized` callback rather than excluded here, so
      * that sign-out still works.
+     *
+     * `manifest.webmanifest` and `sw.js` MUST be excluded explicitly — neither
+     * ends in an image extension, so without them the matcher intercepted both
+     * and 307'd them to /login. The browser fetches the manifest anonymously,
+     * so it would have received a redirect instead of JSON and quietly refused
+     * to offer installation; the service worker would never have registered at
+     * all. Both files are public, non-sensitive static assets.
      */
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
+    "/((?!_next/static|_next/image|favicon.ico|manifest\\.webmanifest|sw\\.js|icons/|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
   ],
 };

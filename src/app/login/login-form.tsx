@@ -14,17 +14,23 @@ import { Alert } from "@/components/ui/feedback";
  * On success it does a full `router.refresh()` before navigating so the new
  * session cookie is picked up by every server component — pushing straight to
  * the destination can otherwise render one frame of the signed-out state.
+ *
+ * `returnTo` is the page the user was trying to reach when middleware sent them
+ * here — a cashier who tapped the POS shortcut on a lapsed session goes back to
+ * /pos, not to a generic landing page. It has already been checked as a safe
+ * same-origin path by `safeCallbackPath`; when absent, "/" resolves the correct
+ * screen for the role server-side.
  */
-export function LoginForm() {
+export function LoginForm({ returnTo }: { returnTo?: string | null }) {
   const router = useRouter();
   const [state, formAction, isPending] = useActionState(signInAction, null);
 
   useEffect(() => {
     if (state?.ok) {
       router.refresh();
-      router.replace("/");
+      router.replace(returnTo ?? "/");
     }
-  }, [state, router]);
+  }, [state, router, returnTo]);
 
   return (
     <Card>

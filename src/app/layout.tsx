@@ -1,14 +1,34 @@
 import type { Metadata, Viewport } from "next";
 import { ToastProvider } from "@/components/ui/feedback";
+import { ServiceWorkerManager } from "@/components/pwa/service-worker-manager";
 import "./globals.css";
+
+const BUSINESS_NAME = process.env.NEXT_PUBLIC_BUSINESS_NAME ?? "CG Car Wash";
 
 export const metadata: Metadata = {
   title: {
-    default: `${process.env.NEXT_PUBLIC_BUSINESS_NAME ?? "CG Car Wash"} POS`,
-    template: `%s · ${process.env.NEXT_PUBLIC_BUSINESS_NAME ?? "CG Car Wash"}`,
+    default: `${BUSINESS_NAME} POS`,
+    template: `%s · ${BUSINESS_NAME}`,
   },
   description: "Point of sale and transaction management for CG Car Wash.",
   robots: { index: false, follow: false },
+  /*
+   * Served as a static file from public/ rather than via the app/manifest.ts
+   * metadata convention. That convention triggers a PageNotFoundError for
+   * /_document during "Collecting page data" on Next 15.5.x, which fails the
+   * production build outright. A static manifest is equivalent for every
+   * browser and keeps the build green; see public/manifest.webmanifest.
+   */
+  manifest: "/manifest.webmanifest",
+  appleWebApp: {
+    // iOS ignores the manifest entirely; these are its equivalent.
+    capable: true,
+    title: BUSINESS_NAME,
+    statusBarStyle: "default",
+  },
+  icons: {
+    apple: "/icons/apple-touch-icon.png",
+  },
 };
 
 export const viewport: Viewport = {
@@ -53,6 +73,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           Skip to main content
         </a>
         <ToastProvider>{children}</ToastProvider>
+        {/* Registers the worker in production and offers an opt-in update. */}
+        <ServiceWorkerManager />
       </body>
     </html>
   );

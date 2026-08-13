@@ -21,6 +21,7 @@
     "verify:workflow": "cross-env NODE_OPTIONS=--conditions=react-server tsx scripts/verify-workflow.ts",
     "db:status": "cross-env NODE_OPTIONS=--conditions=react-server tsx scripts/db-status.ts",
     "mail:check": "cross-env NODE_OPTIONS=--conditions=react-server tsx --env-file=.env scripts/mail-check.ts",
+    "icons": "tsx scripts/generate-icons.ts",
     "db:reset": "prisma migrate reset"
   },
   "dependencies": {
