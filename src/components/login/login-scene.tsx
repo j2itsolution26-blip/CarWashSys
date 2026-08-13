@@ -13,8 +13,23 @@
  * readable over whatever the photo happens to contain.
  */
 
-/** e.g. "/images/login-bg.jpg". Null keeps the illustrated bays. */
-const PHOTO_BACKDROP: string | null = null;
+/**
+ * Path to a photographic backdrop under `public/`, or null for the illustrated
+ * bays. See `public/images/README.md` for the file this expects.
+ *
+ * Set: the photo becomes the scene, and the illustrated vehicles, washers and
+ * bay signage are withdrawn — a real photograph is ONE scene, so drawing a
+ * second illustrated car over it, or captioning half of a car-wash photo
+ * "MOTORCYCLE WASH", would look wrong and read as a mistake.
+ *
+ * Applied as a CSS background rather than <Image>, so a missing or misnamed
+ * file degrades to the illustrated scene instead of rendering a broken image on
+ * the sign-in screen.
+ */
+const PHOTO_BACKDROP: string | null = "/images/login-bg.jpg";
+
+/** True when the illustrated bays should draw. */
+const SHOW_ILLUSTRATION = PHOTO_BACKDROP === null;
 
 const NAVY_DEEP = "#020817";
 const NAVY = "#071a3d";
@@ -143,10 +158,25 @@ export function LoginScene() {
       />
 
       {PHOTO_BACKDROP ? (
-        <div
-          className="pointer-events-none absolute inset-0 bg-cover bg-center bg-no-repeat opacity-70"
-          style={{ backgroundImage: `url('${PHOTO_BACKDROP}')` }}
-        />
+        <>
+          <div
+            className="pointer-events-none absolute inset-0 bg-cover bg-center bg-no-repeat"
+            style={{ backgroundImage: `url('${PHOTO_BACKDROP}')` }}
+          />
+          {/*
+            Navy grade over the photograph. A raw photo behind a login form is
+            the usual way these designs fail: mid-tones sit right where the card
+            needs contrast. This pins the whole image into the brand's dark navy
+            range before the vignette narrows it further.
+          */}
+          <div
+            className="pointer-events-none absolute inset-0"
+            style={{
+              background:
+                `linear-gradient(180deg, rgb(2 8 23 / 0.82), rgb(7 26 61 / 0.68) 45%, rgb(2 8 23 / 0.88))`,
+            }}
+          />
+        </>
       ) : null}
 
       {/* Light pools over each bay — the lit-from-above look of a wash tunnel. */}
@@ -165,7 +195,7 @@ export function LoginScene() {
         reads as an empty band, and give the scene the depth of a real wash
         tunnel rather than a figure floating on a gradient.
       */}
-      {(["left", "right"] as const).map((side) => (
+      {SHOW_ILLUSTRATION && (["left", "right"] as const).map((side) => (
         <div
           key={side}
           className={`pointer-events-none absolute top-[26%] hidden h-[46%] w-[46%] lg:block ${
@@ -192,6 +222,7 @@ export function LoginScene() {
       ))}
 
       {/* ---- LEFT BAY: car ------------------------------------------------ */}
+      {SHOW_ILLUSTRATION ? (
       <svg
         className="pointer-events-none absolute bottom-[17%] left-0 hidden w-[39%] lg:block"
         viewBox="0 0 200 120"
@@ -229,9 +260,11 @@ export function LoginScene() {
         <Washer />
         <Spray x={75} y={80} />
       </svg>
+      ) : null}
 
       {/* ---- RIGHT BAY: motorcycle --------------------------------------- */}
       {/* Mirrored so the washer faces inward, toward the machine. */}
+      {SHOW_ILLUSTRATION ? (
       <svg
         className="pointer-events-none absolute bottom-[17%] right-0 hidden w-[39%] scale-x-[-1] lg:block"
         viewBox="0 0 200 120"
@@ -263,6 +296,7 @@ export function LoginScene() {
         <Washer />
         <Spray x={75} y={80} />
       </svg>
+      ) : null}
 
       {/* ---- wet floor: mirrored sheen along the bottom ------------------- */}
       <div
@@ -308,6 +342,10 @@ export function LoginScene() {
       />
 
       {/* ---- bay signage -------------------------------------------------- */}
+      {/* Withdrawn in photo mode: captioning half of a single photograph
+          "MOTORCYCLE WASH" would be describing something that is not there. */}
+      {SHOW_ILLUSTRATION ? (
+      <>
       <BaySign
         title="Car Wash"
         side="left"
@@ -326,6 +364,8 @@ export function LoginScene() {
           { label: "Perform", detail: "Keep your ride at its best" },
         ]}
       />
+      </>
+      ) : null}
     </div>
   );
 }
